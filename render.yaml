@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: docsense-api
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn src.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: CHROMA_PERSIST_DIR
+        value: ./chroma_data
+      - key: CHUNK_SIZE
+        value: 500
+      - key: CHUNK_OVERLAP
+        value: 50
+      - key: EMBEDDING_MODEL
+        value: text-embedding-3-small
+      - key: LLM_MODEL
+        value: gpt-4o-mini
+      - key: MAX_RETRIEVED_CHUNKS
+        value: 5
