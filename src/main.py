@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from src.routers.documents import router as documents_router
 
 app = FastAPI(
@@ -8,6 +9,13 @@ app = FastAPI(
 )
 
 app.include_router(documents_router, prefix="/documents", tags=["documents"])
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "https://*.vercel.app"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health", tags=["meta"])
