@@ -1,6 +1,7 @@
 import json
 import shutil
 import uuid
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -84,15 +85,38 @@ def upload_document(file: UploadFile):
     )
 
 
+def extract_subquestions(question: str) -> list[str]:
+    """Split numbered/bulleted multi-part questions into individual queries."""
+    lines = question.strip().splitlines()
+    subquestions = []
+    for line in lines:
+        line = line.strip()
+        # Match lines starting with 1. 2. 3. or - or *
+        cleaned = re.sub(r"^[\d]+[.)]\s*|^[-*]\s*", "", line).strip()
+        if cleaned and len(cleaned) > 10:
+            subquestions.append(cleaned)
+    return subquestions if len(subquestions) > 1 else [question]
+
+
 @router.post("/{doc_id}/query", response_model=QueryResponse)
 def query_document(doc_id: str, body: QueryRequest):
     if not collection_exists(doc_id):
         raise HTTPException(status_code=404, detail="Document not found.")
 
-    query_embedding = get_embeddings([body.question])[0]
-
     settings = get_settings()
-    chunks = query_chunks(doc_id, query_embedding, top_k=settings.max_retrieved_chunks)
+    subquestions = extract_subquestions(body.question)
+
+    # Retrieve chunks for each subquestion, deduplicate by chunk index
+    seen = {}
+    for q in subquestions:
+        embedding = get_embeddings([q])[0]
+        results = query_chunks(doc_id, embedding, top_k=settings.max_retrieved_chunks)
+        for chunk in results:
+            if chunk["index"] not in seen:
+                seen[chunk["index"]] = chunk
+
+    # Sort by document order
+    chunks = sorted(seen.values(), key=lambda x: x["index"])
 
     if not chunks:
         raise HTTPException(

@@ -1,5 +1,4 @@
 from openai import OpenAI
-
 from src.config import get_settings
 
 
@@ -9,13 +8,17 @@ def generate_answer(question: str, chunks: list[str]) -> str:
 
     context = "\n\n---\n\n".join(chunks)
 
-    prompt = f"""You are a helpful assistant. Answer the question using ONLY the context below.
-If the answer isn't in the context, say "I couldn't find that in the document."
+    prompt = f"""You are a helpful assistant answering questions about a document.
+Use the context below as your primary source. You may make reasonable inferences 
+from the context even if the exact terminology differs (e.g. "qualifications" and 
+"education" refer to the same thing). If a question truly cannot be answered from 
+the context, say so briefly.
 
 Context:
 {context}
 
-Question: {question}
+Question:
+{question}
 """
 
     response = client.chat.completions.create(
