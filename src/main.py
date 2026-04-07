@@ -12,7 +12,10 @@ app.include_router(documents_router, prefix="/documents", tags=["documents"])
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://*.vercel.app"],
+    allow_origins=[
+        "http://localhost:3000",
+        "https://docsense-ui.vercel.app",
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
