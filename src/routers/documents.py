@@ -1,6 +1,12 @@
 import json
+import shutil
+import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
+from fastapi import APIRouter, HTTPException, UploadFile
+
+from src.config import get_settings
 from src.schemas.documents import (
     DocumentMeta,
     QueryRequest,
@@ -8,32 +14,16 @@ from src.schemas.documents import (
     SourceChunk,
     UploadResponse,
 )
+from src.services.chunker import chunk_text
+from src.services.embedder import get_embeddings
+from src.services.extractor import SUPPORTED_TYPES, extract_text
+from src.services.generator import generate_answer
 from src.services.vector_store import (
     collection_exists,
     delete_collection,
     query_chunks,
     store_chunks,
 )
-import shutil
-import json
-import uuid
-from pathlib import Path
-from datetime import datetime, timezone
-
-from fastapi import APIRouter, HTTPException, UploadFile
-
-from src.config import get_settings
-from src.services.chunker import chunk_text
-from src.services.embedder import get_embeddings
-from src.services.extractor import SUPPORTED_TYPES, extract_text
-from src.schemas.documents import (
-    QueryRequest,
-    QueryResponse,
-    SourceChunk,
-    UploadResponse,
-)
-from src.services.generator import generate_answer
-from src.services.vector_store import collection_exists, query_chunks, store_chunks
 
 router = APIRouter()
 
@@ -43,7 +33,6 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 
 @router.post("/upload", response_model=UploadResponse, status_code=201)
 def upload_document(file: UploadFile):
-    print("▶ Upload handler entered", file.content_type)
     if file.content_type not in SUPPORTED_TYPES:
         raise HTTPException(
             status_code=415,
@@ -55,16 +44,11 @@ def upload_document(file: UploadFile):
     suffix = Path(file.filename).suffix
     dest = UPLOAD_DIR / f"{doc_id}{suffix}"
 
-    # with dest.open("wb") as f:
-    #     shutil.copyfileobj(file.file, f)
-    content = file.file.read()
-    print(f"✓ File read: {len(content)} bytes")
-    dest.write_bytes(content)
-    print(f"✓ File saved")
+    with dest.open("wb") as f:
+        shutil.copyfileobj(file.file, f)
 
     try:
         text = extract_text(dest, file.content_type)
-        print(f"✓ Text extracted: {len(text)} chars")
     except Exception as e:
         dest.unlink(missing_ok=True)
         raise HTTPException(status_code=422, detail=f"Text extraction failed: {e}")
@@ -77,14 +61,10 @@ def upload_document(file: UploadFile):
 
     dest.with_suffix(".txt").write_text(text, encoding="utf-8")
 
-    # Chunk → Embed → Store
     chunks = chunk_text(text, settings.chunk_size, settings.chunk_overlap)
-    print(f"✓ Chunked: {len(chunks)} chunks")
-
     embeddings = get_embeddings([c.text for c in chunks])
-    print(f"✓ Embeddings done: {len(embeddings)}")
-
     store_chunks(doc_id, chunks, embeddings)
+
     metadata = {
         "doc_id": doc_id,
         "filename": file.filename,
@@ -150,9 +130,7 @@ def delete_document(doc_id: str):
     if not collection_exists(doc_id):
         raise HTTPException(status_code=404, detail="Document not found.")
 
-    # Remove ChromaDB collection
     delete_collection(doc_id)
 
-    # Remove all files associated with this doc_id
     for f in UPLOAD_DIR.glob(f"{doc_id}.*"):
         f.unlink(missing_ok=True)
